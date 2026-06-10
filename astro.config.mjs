@@ -5,12 +5,9 @@ import rehypeAutolinkHeadings from 'rehype-autolink-headings';
 
 export default defineConfig({
   site: 'https://jame-louis.github.io',
-  base: '/course-template-astro/',
+  base: '/computer-network-practice/',
   output: 'static',
   integrations: [sitemap()],
-  redirects: {
-    '/schedule': '/course-template-astro/syllabus',
-  },
   markdown: {
     shikiConfig: {
       theme: 'github-dark',
