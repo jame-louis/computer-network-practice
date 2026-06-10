@@ -1,23 +1,17 @@
 ---
 title: 实验1 常用网络命令的使用
 lectureNumber: 1
-module: '基础入门'
+week: 1
+module: 'A. 网络基础'
 description: 'ping / ipconfig / arp / tracert / nslookup'
-duration: '90分钟'
+duration: '2学时（120分钟）'
 difficulty: 'beginner'
 prerequisites: []
 tags: ['计算机网络', '网络命令', '网络诊断']
-hasAssignment: false
+hasAssignment: true
 draft: false
 ---
 
-# 实验1 常用网络命令的使用
-
-教学实践Ⅲ:计算机网络实验 · 第19周 第1课
-
----
-layout: center
----
 
 # 学习目标
 
