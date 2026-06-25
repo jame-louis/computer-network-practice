@@ -10,7 +10,6 @@ prerequisites: []
 tags: ["路由器", "Cisco", "IP配置", "Telnet", "网络层"]
 hasSlides: true
 hasAssignment: true
-draft: true
 ---
 
 ## 学习目标

@@ -10,7 +10,6 @@ prerequisites: ["lecture06"]
 tags: ["静态路由", "默认路由", "路由表", "Cisco", "网络层"]
 hasSlides: true
 hasAssignment: true
-draft: true
 ---
 
 ## 学习目标

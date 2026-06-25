@@ -10,7 +10,6 @@ tags: ["vlan", "三层交换机", "svi", "vlan间路由", "cisco", "packet-trace
 hasSlides: true
 hasAssignment: true
 slidevUrl: ""
-draft: true
 ---
 
 教学实践Ⅲ:计算机网络实验 · 第19周 第5课
