@@ -2,7 +2,7 @@
 title: "实验7 静态路由"
 lectureNumber: 7
 week: 20
-module: "核心概念"
+module: "C. 路由器"
 description: "静态路由与默认路由配置，包括路由表查看、下一跳选择和双向路由验证。"
 duration: "120分钟"
 difficulty: intermediate

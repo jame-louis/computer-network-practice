@@ -9,7 +9,7 @@ difficulty: 'beginner'
 prerequisites: []
 tags: ['计算机网络', '网络命令', '网络诊断']
 hasAssignment: true
-draft: false
+slidevUrl: https://jame-louis.github.io/slidev/network/lecture01 
 ---
 
 

@@ -9,7 +9,7 @@ prerequisites: ['IP地址基础', '二进制与十进制转换', '常用网络�
 tags: ['计算机网络', '子网划分', 'IP地址', 'FLSM', 'VLSM', 'Packet Tracer']
 hasSlides: true
 hasAssignment: true
-draft: false
+slidevUrl: https://jame-louis.github.io/slidev/network/lecture02 
 ---
 
 # 实验2 子网划分与IP地址分配

@@ -1,0 +1,1177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>网络通信流程可视化 - 一条消息的旅程</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: #f8fafc;
+    color: #1e293b;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* 顶部操作栏 */
+  .header {
+    height: 60px;
+    background: #0f172a;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    flex-shrink: 0;
+  }
+  .header-brand { font-size: 16px; font-weight: 600; letter-spacing: 0.5px; }
+  .header-controls { display: flex; align-items: center; gap: 12px; }
+  .url-input {
+    width: 240px;
+    padding: 8px 12px;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    background: #1e293b;
+    color: white;
+    font-size: 14px;
+    outline: none;
+  }
+  .url-input:focus { border-color: #3b82f6; }
+  .btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-primary { background: #3b82f6; color: white; }
+  .btn-primary:hover { background: #2563eb; }
+  .btn-ghost { background: transparent; color: #94a3b8; border: 1px solid #334155; }
+  .btn-ghost:hover { color: white; border-color: #64748b; }
+
+  /* 主区域 */
+  .main {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+
+  /* 左侧时间线 */
+  .timeline-panel {
+    flex: 1.5;
+    overflow-y: auto;
+    padding: 32px;
+    background: white;
+    border-right: 1px solid #e2e8f0;
+    position: relative;
+  }
+  .timeline-title {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: #0f172a;
+  }
+  .timeline-subtitle {
+    font-size: 14px;
+    color: #64748b;
+    margin-bottom: 24px;
+  }
+  .timeline-track {
+    position: relative;
+    padding-left: 32px;
+  }
+  .timeline-line {
+    position: absolute;
+    left: 6px;
+    top: 8px;
+    bottom: 8px;
+    width: 2px;
+    background: #e2e8f0;
+  }
+  .event-card {
+    position: relative;
+    padding: 16px;
+    margin-bottom: 16px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .event-card:hover {
+    border-color: #cbd5e1;
+    transform: translateX(4px);
+  }
+  .event-card.active {
+    border-color: #f59e0b;
+    background: #fffbeb;
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.12), 0 4px 6px -1px rgba(0,0,0,0.05);
+  }
+  .event-dot {
+    position: absolute;
+    left: -32px;
+    top: 20px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: white;
+    border: 2px solid #cbd5e1;
+    transition: all 0.3s;
+    z-index: 2;
+  }
+  .event-card.active .event-dot {
+    background: #f59e0b;
+    border-color: #f59e0b;
+    box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.2);
+  }
+  .event-card.visited .event-dot { border-color: #94a3b8; background: #94a3b8; }
+  .event-header {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+  .event-seq {
+    font-size: 12px;
+    font-weight: 700;
+    color: #94a3b8;
+    font-variant-numeric: tabular-nums;
+  }
+  .event-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #0f172a;
+  }
+  .event-metaphor {
+    font-size: 13px;
+    color: #64748b;
+    margin-top: 4px;
+    font-style: italic;
+  }
+  .event-cause {
+    font-size: 12px;
+    color: #94a3b8;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px dashed #e2e8f0;
+  }
+  .event-changes {
+    margin-top: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .change-tag {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-weight: 500;
+    font-family: monospace;
+  }
+  .change-tag.add { background: #dcfce7; color: #166534; }
+  .change-tag.mod { background: #ffedd5; color: #9a3412; }
+  .change-tag.del { background: #fee2e2; color: #991b1b; }
+
+  /* 右侧面板 */
+  .detail-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #f1f5f9;
+    min-width: 360px;
+  }
+  .tabs {
+    display: flex;
+    background: white;
+    border-bottom: 1px solid #e2e8f0;
+    flex-shrink: 0;
+  }
+  .tab {
+    flex: 1;
+    padding: 14px;
+    text-align: center;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    color: #64748b;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    user-select: none;
+  }
+  .tab:hover { color: #0f172a; background: #f8fafc; }
+  .tab.active { color: #0f172a; border-bottom-color: #3b82f6; background: #f8fafc; }
+
+  .panel-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+  }
+
+  /* 数据包套娃 */
+  .packet-section-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #475569;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .packet-doll {
+    margin-bottom: 20px;
+  }
+  .doll-layer {
+    padding: 12px;
+    border: 2px solid;
+    border-radius: 10px;
+    margin: 4px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+    position: relative;
+    background: white;
+  }
+  .doll-layer:hover { transform: translateX(3px); }
+  .doll-layer.expanded {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  }
+  .doll-layer.dimmed { opacity: 0.25; filter: grayscale(0.5); }
+  .doll-layer.datalink { border-color: #a855f7; background: #faf5ff; }
+  .doll-layer.network { border-color: #f59e0b; background: #fffbeb; }
+  .doll-layer.transport { border-color: #10b981; background: #f0fdf4; }
+  .doll-layer.application { border-color: #3b82f6; background: #eff6ff; }
+  .doll-layer.empty {
+    border-style: dashed;
+    border-color: #cbd5e1;
+    background: #f8fafc;
+    opacity: 0.6;
+  }
+  .layer-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 13px;
+  }
+  .layer-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .layer-name { flex: 1; }
+  .layer-status {
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(0,0,0,0.06);
+    color: #64748b;
+  }
+  .layer-fields {
+    display: none;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed rgba(0,0,0,0.08);
+  }
+  .doll-layer.expanded .layer-fields { display: block; }
+  .field {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 0;
+    font-size: 12px;
+  }
+  .field label { color: #64748b; font-weight: 500; }
+  .field value {
+    font-family: "SF Mono", Monaco, monospace;
+    font-weight: 600;
+    color: #0f172a;
+    background: rgba(255,255,255,0.6);
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  .field value.changed {
+    background: #ffedd5;
+    color: #9a3412;
+    animation: pulse 1s ease;
+  }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); }
+    70% { box-shadow: 0 0 0 6px rgba(245, 158, 11, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+  }
+
+  /* 映射表 */
+  .mapping-card {
+    background: white;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+  .mapping-header {
+    padding: 10px 14px;
+    background: #f8fafc;
+    font-size: 12px;
+    font-weight: 600;
+    color: #475569;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .mapping-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .mapping-row { border-bottom: 1px solid #f1f5f9; transition: background 0.2s; }
+  .mapping-row:last-child { border-bottom: none; }
+  .mapping-row td { padding: 10px 14px; }
+  .mapping-row.active { background: #fffbeb; }
+  .mapping-row.active td { font-weight: 600; color: #0f172a; }
+  .mapping-arrow { color: #94a3b8; padding: 0 4px; }
+  .mapping-note {
+    font-size: 11px;
+    color: #94a3b8;
+    margin-left: 8px;
+    font-weight: 400;
+  }
+
+  /* 节点逻辑 */
+  .logic-card {
+    background: #0f172a;
+    color: #e2e8f0;
+    padding: 20px;
+    border-radius: 10px;
+    font-family: "SF Mono", Monaco, "Cascadia Code", monospace;
+    font-size: 13px;
+    line-height: 1.9;
+  }
+  .logic-title {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #94a3b8;
+    margin-bottom: 12px;
+    border-bottom: 1px solid #1e293b;
+    padding-bottom: 8px;
+  }
+  .logic-step {
+    padding: 3px 0 3px 12px;
+    border-left: 2px solid transparent;
+    margin-left: -12px;
+    transition: all 0.2s;
+  }
+  .logic-step.active {
+    border-left-color: #f59e0b;
+    background: rgba(245, 158, 11, 0.08);
+    color: #fff;
+  }
+  .logic-comment { color: #64748b; font-style: italic; }
+
+  /* 底部控制 */
+  .footer {
+    height: 64px;
+    background: white;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    padding: 0 24px;
+    gap: 24px;
+    flex-shrink: 0;
+  }
+  .control-group { display: flex; align-items: center; gap: 12px; }
+  .control-label { font-size: 13px; color: #64748b; font-weight: 500; }
+  .zoom-slider {
+    width: 160px;
+    height: 4px;
+    -webkit-appearance: none;
+    background: #e2e8f0;
+    border-radius: 2px;
+    outline: none;
+  }
+  .zoom-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #3b82f6;
+    cursor: pointer;
+    border: 2px solid white;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+  .event-nav {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .nav-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #e2e8f0;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+  }
+  .nav-dot:hover { background: #94a3b8; transform: scale(1.2); }
+  .nav-dot.active { background: #3b82f6; }
+  .nav-dot.visited { background: #94a3b8; }
+  .nav-dot::after {
+    content: attr(data-seq);
+    position: absolute;
+    top: -18px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 10px;
+    color: #94a3b8;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .nav-dot:hover::after { opacity: 1; }
+
+  .perspective-toggle {
+    display: flex;
+    gap: 6px;
+  }
+  .p-btn {
+    padding: 4px 10px;
+    border-radius: 4px;
+    border: 1px solid #e2e8f0;
+    background: white;
+    font-size: 12px;
+    cursor: pointer;
+    color: #64748b;
+  }
+  .p-btn:hover { border-color: #cbd5e1; }
+  .p-btn.active { background: #0f172a; color: white; border-color: #0f172a; }
+
+  /* 开始遮罩 */
+  .start-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.85);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    transition: opacity 0.5s;
+  }
+  .start-overlay.hidden { opacity: 0; pointer-events: none; }
+  .start-card {
+    background: white;
+    padding: 40px;
+    border-radius: 16px;
+    max-width: 480px;
+    width: 90%;
+    text-align: center;
+    box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);
+  }
+  .start-card h1 { font-size: 24px; margin-bottom: 12px; color: #0f172a; }
+  .start-card p { color: #64748b; margin-bottom: 24px; line-height: 1.6; }
+  .start-input-group {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .start-input {
+    flex: 1;
+    padding: 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 15px;
+    outline: none;
+  }
+  .start-input:focus { border-color: #3b82f6; }
+
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #94a3b8;
+  }
+  .empty-state-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+    opacity: 0.3;
+  }
+</style>
+</head>
+<body>
+
+<!-- 开始页面 -->
+<div class="start-overlay" id="startOverlay">
+  <div class="start-card">
+    <h1>🚀 一条消息的旅程</h1>
+    <p>输入一个网址，我们将跟随这条消息，看看它如何在网络中诞生、包装、流转，最终带回响应。</p>
+    <div class="start-input-group">
+      <input class="start-input" id="startUrl" value="baidu.com" placeholder="例如: baidu.com">
+      <button class="btn btn-primary" onclick="startJourney()">开始旅程</button>
+    </div>
+    <p style="font-size: 12px; color: #94a3b8; margin: 0;">无需网络连接，这是一个本地教学演示</p>
+  </div>
+</div>
+
+<!-- 顶部 -->
+<header class="header">
+  <div class="header-brand">📬 网络通信流程可视化</div>
+  <div class="header-controls">
+    <span style="font-size:13px;color:#94a3b8;margin-right:8px;">目标:</span>
+    <input class="url-input" id="headerUrl" value="baidu.com" readonly>
+    <button class="btn btn-ghost" onclick="resetJourney()">重置</button>
+  </div>
+</header>
+
+<!-- 主区域 -->
+<div class="main">
+  <!-- 左侧时间线 -->
+  <div class="timeline-panel" id="timelinePanel">
+    <div class="timeline-title">消息的生命周期</div>
+    <div class="timeline-subtitle">点击事件卡片查看详情，使用底部导航快速跳转</div>
+    <div class="timeline-track" id="timelineTrack">
+      <div class="timeline-line"></div>
+      <!-- 事件卡片由 JS 生成 -->
+    </div>
+  </div>
+
+  <!-- 右侧面板 -->
+  <div class="detail-panel">
+    <div class="tabs">
+      <div class="tab active" data-tab="packet" onclick="switchTab('packet')">📦 数据包剖面</div>
+      <div class="tab" data-tab="mapping" onclick="switchTab('mapping')">🗺️ 统一映射表</div>
+      <div class="tab" data-tab="logic" onclick="switchTab('logic')">⚙️ 节点逻辑</div>
+    </div>
+    <div class="panel-content" id="panelContent">
+      <div class="empty-state">
+        <div class="empty-state-icon">📦</div>
+        <div>点击左侧事件开始探索</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 底部 -->
+<footer class="footer">
+  <div class="control-group">
+    <span class="control-label">抽象层级:</span>
+    <input type="range" class="zoom-slider" id="zoomSlider" min="1" max="3" value="2" oninput="setZoom(this.value)">
+    <span class="control-label" id="zoomLabel">标准</span>
+  </div>
+  <div class="control-group">
+    <span class="control-label">透视模式:</span>
+    <div class="perspective-toggle" id="perspectiveToggle">
+      <button class="p-btn active" onclick="setPerspective('all')">全部</button>
+      <button class="p-btn" onclick="setPerspective('application')">内容</button>
+      <button class="p-btn" onclick="setPerspective('transport')">端口</button>
+      <button class="p-btn" onclick="setPerspective('network')">地址</button>
+      <button class="p-btn" onclick="setPerspective('datalink')">标签</button>
+    </div>
+  </div>
+  <div class="control-group" style="margin-left:auto;">
+    <span class="control-label">事件导航:</span>
+    <div class="event-nav" id="eventNav"></div>
+  </div>
+</footer>
+
+<script>
+// ==================== 数据模型 ====================
+
+const journeyEvents = [
+  {
+    id: 'birth',
+    seq: 1,
+    title: '消息诞生',
+    metaphor: '你在信纸上写下请求',
+    cause: '用户在浏览器输入 baidu.com 并回车',
+    node: { name: '你的电脑', metaphor: '寄信人', logic: [
+      '1. 用户输入网址: baidu.com',
+      '2. 浏览器构造 HTTP 请求报文',
+      '3. 消息诞生，等待发送'
+    ]},
+    packet: {
+      application: { type: 'HTTP', content: 'GET / HTTP/1.1\nHost: baidu.com\nUser-Agent: Mozilla/5.0...', active: true },
+      transport: null,
+      network: null,
+      datalink: null
+    },
+    changes: [{type:'add', text:'HTTP 请求'}],
+    activeMappings: []
+  },
+  {
+    id: 'dns',
+    seq: 2,
+    title: '查号台（DNS）',
+    metaphor: '去查号台询问电话号码',
+    cause: '计算机需要知道 baidu.com 对应的 IP 地址',
+    node: { name: 'DNS 服务器', metaphor: '查号台', logic: [
+      '1. 接收查询请求: "baidu.com 的 IP 是多少？"',
+      '2. 查表: baidu.com → 7.7.7.7',
+      '3. 返回查询结果'
+    ]},
+    packet: {
+      application: { type: 'DNS Query', content: 'Query: baidu.com A?\nType: A Record', active: true },
+      transport: { proto: 'UDP', srcPort: '40401', dstPort: '53', active: true },
+      network: { srcIP: '192.168.1.10', dstIP: '8.8.8.8', active: true },
+      datalink: { srcMAC: 'AA:BB:CC:DD:EE:01', dstMAC: 'AA:BB:CC:DD:EE:02 (网关)', active: true }
+    },
+    changes: [{type:'add', text:'UDP:53'}, {type:'add', text:'IP: 8.8.8.8'}, {type:'add', text:'MAC: 网关'}],
+    activeMappings: ['dns']
+  },
+  {
+    id: 'dns-response',
+    seq: 3,
+    title: '获得目的地地址',
+    metaphor: '查号台告诉你号码是 7.7.7.7',
+    cause: 'DNS 服务器返回了查询结果',
+    node: { name: '你的电脑', metaphor: '寄信人', logic: [
+      '1. 收到 DNS 响应: baidu.com = 7.7.7.7',
+      '2. 缓存该映射关系',
+      '3. 开始构造真正的 HTTP 请求'
+    ]},
+    packet: {
+      application: { type: 'HTTP', content: 'GET / HTTP/1.1\nHost: baidu.com', active: true },
+      transport: null,
+      network: null,
+      datalink: null
+    },
+    changes: [{type:'mod', text:'目标 IP: 7.7.7.7 (已解析)'}],
+    activeMappings: ['dns']
+  },
+  {
+    id: 'tcp',
+    seq: 4,
+    title: '装进信封（TCP）',
+    metaphor: '给信纸装进信封，写上窗口编号',
+    cause: '需要标识发送方和接收方的应用程序',
+    node: { name: '传输层', metaphor: '信封', logic: [
+      '1. 分配源端口: 40401 (随机)',
+      '2. 确定目标端口: 80 (HTTP 默认)',
+      '3. 封装 TCP 头部'
+    ]},
+    packet: {
+      application: { type: 'HTTP', content: 'GET / HTTP/1.1\nHost: baidu.com', active: true },
+      transport: { proto: 'TCP', srcPort: '40401', dstPort: '80', active: true },
+      network: null,
+      datalink: null
+    },
+    changes: [{type:'add', text:'TCP Src:40401 Dst:80'}],
+    activeMappings: []
+  },
+  {
+    id: 'ip',
+    seq: 5,
+    title: '贴上快递单（IP）',
+    metaphor: '在信封外贴上快递单，写明收发地址',
+    cause: '需要在全球网络中定位源和目的地',
+    node: { name: '网络层', metaphor: '快递单', logic: [
+      '1. 写入源地址: 192.168.1.10',
+      '2. 写入目标地址: 7.7.7.7',
+      '3. 封装 IP 头部'
+    ]},
+    packet: {
+      application: { type: 'HTTP', content: 'GET / HTTP/1.1\nHost: baidu.com', active: true },
+      transport: { proto: 'TCP', srcPort: '40401', dstPort: '80', active: true },
+      network: { srcIP: '192.168.1.10', dstIP: '7.7.7.7', active: true },
+      datalink: null
+    },
+    changes: [{type:'add', text:'IP Src:192.168.1.10 Dst:7.7.7.7'}],
+    activeMappings: []
+  },
+  {
+    id: 'mac',
+    seq: 6,
+    title: '贴上运输标签（MAC）',
+    metaphor: '给包裹贴上运输标签，只写下一站',
+    cause: '局域网内通过物理地址通信，需要找到网关',
+    node: { name: '链路层', metaphor: '运输标签', logic: [
+      '1. 查 ARP 表: 192.168.1.1 → CC',
+      '2. 写入源 MAC: AA',
+      '3. 写入目标 MAC: CC (网关)',
+      '4. 封装以太网帧'
+    ]},
+    packet: {
+      application: { type: 'HTTP', content: 'GET / HTTP/1.1\nHost: baidu.com', active: true },
+      transport: { proto: 'TCP', srcPort: '40401', dstPort: '80', active: true },
+      network: { srcIP: '192.168.1.10', dstIP: '7.7.7.7', active: true },
+      datalink: { srcMAC: 'AA:BB:CC:DD:EE:01', dstMAC: 'AA:BB:CC:DD:EE:02 (网关)', active: true }
+    },
+    changes: [{type:'add', text:'MAC Src:AA Dst:CC(网关)'}],
+    activeMappings: ['arp']
+  },
+  {
+    id: 'nat',
+    seq: 7,
+    title: '经过收发室（NAT）',
+    metaphor: '公寓收发室把私人地址改成公寓门牌号',
+    cause: '内网地址不能在公网传输，需要共享公网 IP',
+    node: { name: '网关路由器', metaphor: '收发室', logic: [
+      '1. 发现目标 IP 不在本地网段',
+      '2. 查 NAT 表: 192.168.1.10:40401 → ?',
+      '3. 新建映射: 192.168.1.10:40401 ↔ 20.20.20.20:505',
+      '4. 重写快递单上的"寄件人地址"',
+      '5. 转发到互联网'
+    ]},
+    packet: {
+      application: { type: 'HTTP', content: 'GET / HTTP/1.1\nHost: baidu.com', active: true },
+      transport: { proto: 'TCP', srcPort: '505', dstPort: '80', changed: true, active: true },
+      network: { srcIP: '20.20.20.20', dstIP: '7.7.7.7', changed: true, active: true },
+      datalink: { srcMAC: 'DD:DD:DD:DD:DD:01', dstMAC: 'XX:XX:XX:XX:XX:01 (下一跳)', active: true }
+    },
+    changes: [{type:'mod', text:'Src IP: 192.168.1.10 → 20.20.20.20'}, {type:'mod', text:'Src Port: 40401 → 505'}],
+    activeMappings: ['nat']
+  },
+  {
+    id: 'route',
+    seq: 8,
+    title: '跨越城市（路由）',
+    metaphor: '包裹在城市间转运，每站只换运输标签',
+    cause: '数据包需要经过多个路由器才能到达目标网络',
+    node: { name: '互联网路由器', metaphor: '转运中心', logic: [
+      '1. 读取运输标签（MAC）→ 是给我的',
+      '2. 拆开标签，读取快递单（IP）',
+      '3. 查路由表: 7.7.7.0/24 → 转发到端口 Y',
+      '4. 贴上新的运输标签（下一跳 MAC）',
+      '5. 注意: 快递单上的地址始终不变'
+    ]},
+    packet: {
+      application: { type: 'HTTP', content: 'GET / HTTP/1.1\nHost: baidu.com', active: true },
+      transport: { proto: 'TCP', srcPort: '505', dstPort: '80', active: true },
+      network: { srcIP: '20.20.20.20', dstIP: '7.7.7.7', active: true },
+      datalink: { srcMAC: 'XX:XX:XX:XX:XX:02', dstMAC: 'FF:FF:FF:FF:FF:01 (目的地网关)', changed: true, active: true }
+    },
+    changes: [{type:'mod', text:'MAC: XX → FF (逐跳变化)'}, {type:'add', text:'IP 保持不变'}],
+    activeMappings: ['route']
+  },
+  {
+    id: 'unpack',
+    seq: 9,
+    title: '拆开包装（解封装）',
+    metaphor: '目的地收发室逐层拆开包裹，读到你的信',
+    cause: '服务器需要读取原始的 HTTP 请求内容',
+    node: { name: 'Web 服务器', metaphor: '收件人', logic: [
+      '1. 接收运输标签（MAC）→ 确认是给我的',
+      '2. 拆开标签，读取快递单（IP）→ 确认是发给我的',
+      '3. 拆开信封（TCP）→ 确认交给 80 端口进程',
+      '4. 读取信纸（HTTP）→ 用户要首页',
+      '5. 构造 HTTP 响应'
+    ]},
+    packet: {
+      application: { type: 'HTTP Response', content: 'HTTP/1.1 200 OK\nContent-Type: text/html\n\n<html>...</html>', active: true },
+      transport: { proto: 'TCP', srcPort: '80', dstPort: '505', active: true },
+      network: { srcIP: '7.7.7.7', dstIP: '20.20.20.20', active: true },
+      datalink: { srcMAC: 'FF:FF:FF:FF:FF:01', dstMAC: 'XX:XX:XX:XX:XX:02', active: true }
+    },
+    changes: [{type:'mod', text:'方向反转: 请求 → 响应'}],
+    activeMappings: []
+  },
+  {
+    id: 'return',
+    seq: 10,
+    title: '返程与还原（NAT 反向）',
+    metaphor: '回信回到公寓，收发室根据记录交给住户',
+    cause: '响应需要回到最初发起请求的电脑',
+    node: { name: '网关路由器', metaphor: '收发室', logic: [
+      '1. 收到响应: 目标 IP 20.20.20.20:505',
+      '2. 查 NAT 表: 20.20.20.20:505 → 192.168.1.10:40401',
+      '3. 重写快递单: 目标地址还原为内网地址',
+      '4. 转发到局域网'
+    ]},
+    packet: {
+      application: { type: 'HTTP Response', content: 'HTTP/1.1 200 OK\n\n<html>...</html>', active: true },
+      transport: { proto: 'TCP', srcPort: '80', dstPort: '40401', changed: true, active: true },
+      network: { srcIP: '7.7.7.7', dstIP: '192.168.1.10', changed: true, active: true },
+      datalink: { srcMAC: 'CC:CC:CC:CC:CC:02', dstMAC: 'AA:BB:CC:DD:EE:01 (你的电脑)', active: true }
+    },
+    changes: [{type:'mod', text:'Dst IP: 20.20.20.20 → 192.168.1.10'}, {type:'mod', text:'Dst Port: 505 → 40401'}],
+    activeMappings: ['nat']
+  }
+];
+
+const mappings = {
+  dns: {
+    type: 'DNS',
+    name: '查号台',
+    desc: '名字 → IP 地址',
+    entries: [
+      { from: 'baidu.com', to: '7.7.7.7', active: false }
+    ]
+  },
+  nat: {
+    type: 'NAT',
+    name: '收发室',
+    desc: '内网地址 ↔ 公网地址',
+    entries: [
+      { from: '192.168.1.10:40401', to: '20.20.20.20:505', active: false, note: '出程' },
+      { from: '20.20.20.20:505', to: '192.168.1.10:40401', active: false, note: '返程' }
+    ]
+  },
+  route: {
+    type: 'Route',
+    name: '导航表',
+    desc: '目标网段 → 下一跳',
+    entries: [
+      { from: '0.0.0.0/0', to: '20.20.20.2', active: false },
+      { from: '7.7.7.0/24', to: '直接连接', active: false }
+    ]
+  },
+  arp: {
+    type: 'ARP',
+    name: '物理映射',
+    desc: 'IP → MAC 地址',
+    entries: [
+      { from: '192.168.1.1', to: 'CC:CC:CC:CC:CC:02 (网关)', active: false },
+      { from: '192.168.1.10', to: 'AA:AA:AA:AA:AA:01 (你的电脑)', active: false }
+    ]
+  }
+};
+
+// ==================== 状态 ====================
+
+let currentEventIndex = -1;
+let activeTab = 'packet';
+let zoomLevel = 2; // 1=概览, 2=标准, 3=细节
+let perspectiveLayer = 'all';
+let started = false;
+
+// ==================== 初始化 ====================
+
+function init() {
+  renderNav();
+  document.getElementById('headerUrl').value = document.getElementById('startUrl').value;
+}
+
+function startJourney() {
+  started = true;
+  document.getElementById('startOverlay').classList.add('hidden');
+  document.getElementById('headerUrl').value = document.getElementById('startUrl').value;
+  renderTimeline();
+  selectEvent(0);
+}
+
+function resetJourney() {
+  currentEventIndex = -1;
+  started = false;
+  document.getElementById('startOverlay').classList.remove('hidden');
+  document.getElementById('timelineTrack').innerHTML = '<div class="timeline-line"></div>';
+  document.getElementById('panelContent').innerHTML = `
+    <div class="empty-state">
+      <div class="empty-state-icon">📦</div>
+      <div>点击左侧事件开始探索</div>
+    </div>
+  `;
+  updateNav();
+}
+
+// ==================== 渲染 ====================
+
+function renderTimeline() {
+  const track = document.getElementById('timelineTrack');
+  track.innerHTML = '<div class="timeline-line"></div>';
+  
+  journeyEvents.forEach((evt, idx) => {
+    const card = document.createElement('div');
+    card.className = 'event-card';
+    card.dataset.index = idx;
+    card.onclick = () => selectEvent(idx);
+    
+    const changesHtml = evt.changes.map(c => 
+      `<span class="change-tag ${c.type}">${c.type === 'add' ? '+' : c.type === 'mod' ? '⟲' : '-'} ${c.text}</span>`
+    ).join('');
+    
+    card.innerHTML = `
+      <div class="event-dot"></div>
+      <div class="event-header">
+        <span class="event-seq">${String(evt.seq).padStart(2, '0')}</span>
+        <span class="event-title">${evt.title}</span>
+      </div>
+      <div class="event-metaphor">"${evt.metaphor}"</div>
+      <div class="event-cause">原因: ${evt.cause}</div>
+      <div class="event-changes">${changesHtml}</div>
+    `;
+    track.appendChild(card);
+  });
+}
+
+function renderNav() {
+  const nav = document.getElementById('eventNav');
+  nav.innerHTML = '';
+  journeyEvents.forEach((evt, idx) => {
+    const dot = document.createElement('div');
+    dot.className = 'nav-dot';
+    dot.dataset.seq = evt.seq;
+    dot.dataset.index = idx;
+    dot.onclick = () => selectEvent(idx);
+    nav.appendChild(dot);
+  });
+}
+
+function updateNav() {
+  const dots = document.querySelectorAll('.nav-dot');
+  dots.forEach((dot, idx) => {
+    dot.classList.remove('active', 'visited');
+    if (idx === currentEventIndex) dot.classList.add('active');
+    else if (idx < currentEventIndex) dot.classList.add('visited');
+  });
+}
+
+function updateTimelineCards() {
+  const cards = document.querySelectorAll('.event-card');
+  cards.forEach((card, idx) => {
+    card.classList.remove('active', 'visited');
+    if (idx === currentEventIndex) {
+      card.classList.add('active');
+      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else if (idx < currentEventIndex) {
+      card.classList.add('visited');
+    }
+  });
+}
+
+// ==================== 选择事件 ====================
+
+function selectEvent(index) {
+  if (!started) return;
+  currentEventIndex = index;
+  updateNav();
+  updateTimelineCards();
+  renderPanel();
+}
+
+// ==================== 右侧面板 ====================
+
+function switchTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.tab === tab);
+  });
+  renderPanel();
+}
+
+function renderPanel() {
+  const container = document.getElementById('panelContent');
+  if (currentEventIndex < 0) return;
+  
+  const evt = journeyEvents[currentEventIndex];
+  
+  if (activeTab === 'packet') {
+    container.innerHTML = renderPacketTab(evt);
+    attachLayerListeners();
+  } else if (activeTab === 'mapping') {
+    container.innerHTML = renderMappingTab(evt);
+  } else if (activeTab === 'logic') {
+    container.innerHTML = renderLogicTab(evt);
+  }
+}
+
+function renderPacketTab(evt) {
+  const p = evt.packet;
+  const zoom = zoomLevel;
+  
+  function renderLayer(layer, name, color, icon, emptyText) {
+    if (!layer || !layer.active) {
+      return zoom >= 3 ? `<div class="doll-layer empty" data-layer="${name}"><div class="layer-header"><span class="layer-dot" style="background:#cbd5e1"></span><span class="layer-name">${icon} ${emptyText}</span><span class="layer-status">未封装</span></div></div>` : '';
+    }
+    
+    const isChanged = layer.changed ? 'changed' : '';
+    const fields = [];
+    if (layer.content) fields.push({label:'内容', value: layer.content.replace(/\n/g, '<br>')});
+    if (layer.proto) fields.push({label:'协议', value: layer.proto});
+    if (layer.srcPort) fields.push({label:'源端口', value: layer.srcPort, changed: layer.changed});
+    if (layer.dstPort) fields.push({label:'目标端口', value: layer.dstPort});
+    if (layer.srcIP) fields.push({label:'源 IP', value: layer.srcIP, changed: layer.changed});
+    if (layer.dstIP) fields.push({label:'目标 IP', value: layer.dstIP});
+    if (layer.srcMAC) fields.push({label:'源 MAC', value: layer.srcMAC});
+    if (layer.dstMAC) fields.push({label:'目标 MAC', value: layer.dstMAC});
+    
+    const fieldsHtml = zoom >= 2 ? fields.map(f => `
+      <div class="field">
+        <label>${f.label}</label>
+        <value class="${f.changed ? 'changed' : ''}">${f.value}</value>
+      </div>
+    `).join('') : '';
+    
+    const layerNames = {
+      application: '信纸（应用层）',
+      transport: '信封（传输层）',
+      network: '快递单（网络层）',
+      datalink: '运输标签（链路层）'
+    };
+    
+    const layerIcons = {
+      application: '📄',
+      transport: '✉️',
+      network: '📋',
+      datalink: '🏷️'
+    };
+    
+    return `
+      <div class="doll-layer ${name} ${layer.expanded ? 'expanded' : ''}" data-layer="${name}">
+        <div class="layer-header">
+          <span class="layer-dot" style="background:${color}"></span>
+          <span class="layer-name">${layerIcons[name]} ${layerNames[name]}</span>
+          <span class="layer-status">${layer.type || '已封装'}</span>
+        </div>
+        <div class="layer-fields">${fieldsHtml}</div>
+        ${layer.nested || ''}
+      </div>
+    `;
+  }
+  
+  // 构建嵌套结构（从内到外）
+  let inner = renderLayer(p.application, 'application', '#3b82f6', '', '信纸');
+  let transportWrapped = p.transport && p.transport.active ? 
+    renderLayer({...p.transport, nested: inner}, 'transport', '#10b981', '', '信封') : inner;
+  let networkWrapped = p.network && p.network.active ? 
+    renderLayer({...p.network, nested: transportWrapped}, 'network', '#f59e0b', '', '快递单') : transportWrapped;
+  let datalinkWrapped = p.datalink && p.datalink.active ? 
+    renderLayer({...p.datalink, nested: networkWrapped}, 'datalink', '#a855f7', '', '运输标签') : networkWrapped;
+  
+  return `
+    <div class="packet-section-title">当前数据包状态（点击层展开）</div>
+    <div class="packet-doll">${datalinkWrapped}</div>
+    ${renderDiffSummary(evt)}
+  `;
+}
+
+function renderDiffSummary(evt) {
+  if (!evt.changes || evt.changes.length === 0) return '';
+  const items = evt.changes.map(c => {
+    const icon = c.type === 'add' ? '➕' : c.type === 'mod' ? '⟲' : '➖';
+    return `<div style="padding:6px 0;font-size:13px;color:#475569">${icon} ${c.text}</div>`;
+  }).join('');
+  return `
+    <div style="margin-top:16px;padding:12px;background:#fff;border:1px solid #e2e8f0;border-radius:8px;">
+      <div style="font-size:12px;font-weight:600;color:#0f172a;margin-bottom:4px;">本次关键变化</div>
+      ${items}
+    </div>
+  `;
+}
+
+function attachLayerListeners() {
+  document.querySelectorAll('.doll-layer').forEach(layer => {
+    layer.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const layerName = this.dataset.layer;
+      if (perspectiveLayer !== 'all' && perspectiveLayer !== layerName) return;
+      this.classList.toggle('expanded');
+    });
+  });
+}
+
+function renderMappingTab(evt) {
+  const activeTypes = evt.activeMappings;
+  
+  function renderMappingTable(key, data) {
+    const isActive = activeTypes.includes(key);
+    const rows = data.entries.map((entry, i) => {
+      const rowActive = isActive && entry.active;
+      return `
+        <tr class="mapping-row ${rowActive ? 'active' : ''}">
+          <td>
+            <span style="font-family:monospace;color:#0f172a">${entry.from}</span>
+            <span class="mapping-arrow">→</span>
+            <span style="font-family:monospace;color:#0f172a">${entry.to}</span>
+            ${entry.note ? `<span class="mapping-note">${entry.note}</span>` : ''}
+          </td>
+        </tr>
+      `;
+    }).join('');
+    
+    return `
+      <div class="mapping-card">
+        <div class="mapping-header">
+          <span>${data.type}</span>
+          <span style="color:#94a3b8;font-weight:400;">${data.name} · ${data.desc}</span>
+        </div>
+        <table class="mapping-table">${rows}</table>
+      </div>
+    `;
+  }
+  
+  // 根据事件动态更新映射表活跃状态
+  const dynamicMappings = JSON.parse(JSON.stringify(mappings));
+  if (evt.id === 'dns' || evt.id === 'dns-response') {
+    dynamicMappings.dns.entries[0].active = true;
+  }
+  if (evt.id === 'nat') {
+    dynamicMappings.nat.entries[0].active = true;
+  }
+  if (evt.id === 'return') {
+    dynamicMappings.nat.entries[1].active = true;
+  }
+  if (evt.id === 'mac') {
+    dynamicMappings.arp.entries[0].active = true;
+  }
+  if (evt.id === 'route') {
+    dynamicMappings.route.entries[0].active = true;
+  }
+  
+  return `
+    <div class="packet-section-title">统一映射表（所有节点本质都是"查表-重写"）</div>
+    ${renderMappingTable('dns', dynamicMappings.dns)}
+    ${renderMappingTable('nat', dynamicMappings.nat)}
+    ${renderMappingTable('route', dynamicMappings.route)}
+    ${renderMappingTable('arp', dynamicMappings.arp)}
+  `;
+}
+
+function renderLogicTab(evt) {
+  const steps = evt.node.logic.map((step, i) => {
+    const isActive = i === evt.node.logic.length - 1 || i === 0; // 高亮首尾作为示例
+    return `<div class="logic-step ${isActive ? 'active' : ''}">${step}</div>`;
+  }).join('');
+  
+  return `
+    <div class="packet-section-title">节点处理逻辑（去设备化）</div>
+    <div style="margin-bottom:12px;padding:10px;background:#fff;border-radius:6px;border:1px solid #e2e8f0;font-size:13px;">
+      <span style="font-weight:600;color:#0f172a">${evt.node.name}</span>
+      <span style="color:#94a3b8"> · ${evt.node.metaphor}</span>
+    </div>
+    <div class="logic-card">
+      <div class="logic-title">Processing Logic</div>
+      ${steps}
+      <div class="logic-comment" style="margin-top:12px;padding-top:12px;border-top:1px solid #1e293b;">
+        // 核心认知: 节点只关心外层标签，不偷看内容
+      </div>
+    </div>
+  `;
+}
+
+// ==================== 控制 ====================
+
+function setZoom(val) {
+  zoomLevel = parseInt(val);
+  const labels = {1: '概览', 2: '标准', 3: '细节'};
+  document.getElementById('zoomLabel').textContent = labels[zoomLevel];
+  if (started) renderPanel();
+}
+
+function setPerspective(layer) {
+  perspectiveLayer = layer;
+  document.querySelectorAll('.p-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.textContent === (layer === 'all' ? '全部' : 
+      layer === 'application' ? '内容' :
+      layer === 'transport' ? '端口' :
+      layer === 'network' ? '地址' : '标签'));
+  });
+  
+  // 应用视觉透视
+  document.querySelectorAll('.doll-layer').forEach(el => {
+    if (layer === 'all') {
+      el.classList.remove('dimmed');
+    } else {
+      if (el.dataset.layer === layer) {
+        el.classList.remove('dimmed');
+      } else {
+        el.classList.add('dimmed');
+      }
+    }
+  });
+}
+
+// ==================== 启动 ====================
+
+init();
+</script>
+</body>
+</html>

@@ -2,7 +2,7 @@
 title: "实验6 路由器的基本配置"
 lectureNumber: 6
 week: 19
-module: "核心概念"
+module: "C. 路由器"
 description: "路由器基本配置，包括接口IP、Serial链路、Telnet远程登录与配置保存。"
 duration: "120分钟"
 difficulty: intermediate

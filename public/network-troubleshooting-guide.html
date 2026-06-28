@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>网络故障排查命令决策手册</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'Noto Sans SC', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'Consolas', 'monospace'],
+                    },
+                    colors: {
+                        primary: { 50: '#eff6ff', 100: '#dbeafe', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8', 900: '#1e3a8a' },
+                        accent: { 50: '#fffbeb', 100: '#fef3c7', 500: '#f59e0b', 600: '#d97706', 700: '#b45309' },
+                        success: { 50: '#f0fdf4', 100: '#dcfce7', 500: '#22c55e', 600: '#16a34a' },
+                        danger: { 50: '#fef2f2', 100: '#fee2e2', 500: '#ef4444', 600: '#dc2626' },
+                    }
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer base {
+            html { scroll-behavior: smooth; }
+            body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+            code, .font-mono { font-family: 'JetBrains Mono', monospace; }
+        }
+        @layer components {
+            .cmd-highlight {
+                @apply inline-block px-2 py-0.5 rounded bg-accent-50 text-accent-700 border border-accent-100 font-mono text-sm font-semibold;
+            }
+            .cmd-box {
+                @apply bg-slate-900 text-slate-50 p-4 rounded-lg font-mono text-sm overflow-x-auto leading-relaxed;
+            }
+            .decision-node {
+                @apply relative cursor-pointer transition-all duration-300 hover:shadow-lg hover:-translate-y-1;
+            }
+            .decision-node.active {
+                @apply ring-2 ring-primary-500 ring-offset-2;
+            }
+            .section-card {
+                @apply bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden transition-all duration-500;
+            }
+            .section-card.highlighted {
+                @apply ring-2 ring-primary-500 ring-offset-4 border-primary-200 shadow-lg;
+            }
+            .param-row:hover {
+                @apply bg-slate-50;
+            }
+            .output-line { @apply block; }
+            .output-line.highlight { @apply bg-yellow-500/10 border-l-2 border-yellow-500 pl-2 -ml-2; }
+            .output-line.error { @apply bg-red-500/10 border-l-2 border-red-500 pl-2 -ml-2; }
+            .output-line.success { @apply bg-green-500/10 border-l-2 border-green-500 pl-2 -ml-2; }
+        }
+    </style>
+</head>
+<body class="text-slate-800 antialiased">
+
+    <!-- 顶部导航 -->
+    <nav class="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-network-wired text-primary-600"></i>
+                <span class="font-semibold text-slate-900">网络故障排查手册</span>
+            </div>
+            <div class="hidden md:flex items-center gap-6 text-sm font-medium text-slate-600">
+                <a href="#flowchart" class="hover:text-primary-600 transition-colors">排查流程</a>
+                <a href="#ipconfig" class="hover:text-primary-600 transition-colors">ipconfig</a>
+                <a href="#ping" class="hover:text-primary-600 transition-colors">ping</a>
+                <a href="#arp" class="hover:text-primary-600 transition-colors">arp</a>
+                <a href="#tracert" class="hover:text-primary-600 transition-colors">tracert</a>
+                <a href="#nslookup" class="hover:text-primary-600 transition-colors">nslookup</a>
+                <a href="#summary" class="hover:text-primary-600 transition-colors">速查表</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero 区域 -->
+    <header class="bg-white border-b border-slate-200 pt-16 pb-12">
+        <div class="max-w-4xl mx-auto px-4 text-center">
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary-50 text-primary-700 text-sm font-medium mb-6 border border-primary-100">
+                <i class="fa-solid fa-graduation-cap text-xs"></i>
+                <span>面向网络工程教学与实验场景</span>
+            </div>
+            <h1 class="text-3xl sm:text-4xl md:text-5xl font-bold text-slate-900 tracking-tight mb-4">
+                网络故障排查命令<br class="hidden sm:block">
+                <span class="text-primary-600">决策工作流手册</span>
+            </h1>
+            <p class="text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed mb-8">
+                不是记忆孤立命令，而是掌握<span class="font-semibold text-slate-900">"何时用哪个"</span>的排查思维。
+                从本机配置到域名解析，按决策路径使用五大核心命令定位网络故障。
+            </p>
+            <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+                <a href="#flowchart" class="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium transition-colors shadow-sm shadow-primary-200">
+                    <i class="fa-solid fa-route"></i>
+                    查看排查流程图
+                </a>
+                <a href="#summary" class="inline-flex items-center gap-2 px-6 py-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg font-medium transition-colors">
+                    <i class="fa-solid fa-table-list"></i>
+                    命令速查表
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-4 sm:px-6 py-12 space-y-16">
+
+        <!-- 决策流程图 -->
+        <section id="flowchart" class="scroll-mt-20">
+            <div class="flex items-center gap-3 mb-8">
+                <div class="w-8 h-8 rounded-lg bg-primary-100 text-primary-700 flex items-center justify-center">
+                    <i class="fa-solid fa-sitemap"></i>
+                </div>
+                <h2 class="text-2xl font-bold text-slate-900">网络故障排查决策流程</h2>
+            </div>
+            <p class="text-slate-600 mb-8">点击下方节点可直接跳转到对应命令详解。遵循<span class="font-semibold">自上而下</span>的顺序排查，避免遗漏。</p>
+
+            <div class="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-sm relative overflow-hidden">
+                <!-- 流程图 SVG -->
+                <div class="flex flex-col items-center gap-4 max-w-3xl mx-auto">
+
+                    <!-- 起点 -->
+                    <div class="decision-node bg-slate-900 text-white px-6 py-3 rounded-xl font-semibold shadow-md w-full max-w-xs text-center"
+                         onclick="scrollToSection('ipconfig')">
+                        <i class="fa-solid fa-triangle-exclamation mr-2 text-yellow-400"></i>发现网络故障
+                    </div>
+
+                    <div class="h-6 w-0.5 bg-slate-300"></div>
+                    <i class="fa-solid fa-chevron-down text-slate-400 text-xs -mt-3"></i>
+
+                    <!-- Step 1: ipconfig -->
+                    <a href="#ipconfig" class="decision-node bg-primary-50 border-2 border-primary-200 hover:border-primary-400 px-6 py-4 rounded-xl w-full max-w-md text-center group"
+                       id="node-ipconfig">
+                        <div class="flex items-center justify-center gap-3">
+                            <span class="w-8 h-8 rounded-full bg-primary-600 text-white flex items-center justify-center text-sm font-bold">1</span>
+                            <div class="text-left">
+                                <div class="font-mono font-bold text-primary-900 text-lg">ipconfig</div>
+                                <div class="text-sm text-primary-700">确认本机网络配置是否正确</div>
+                            </div>
+                            <i class="fa-solid fa-arrow-right text-primary-400 group-hover:translate-x-1 transition-transform"></i>
+                        </div>
+                    </a>
+
+                    <div class="h-6 w-0.5 bg-slate-300"></div>
+                    <i class="fa-solid fa-chevron-down text-slate-400 text-xs -mt-3"></i>
+
+                    <!-- Step 2: ping loopback -->
+                    <a href="#ping" class="decision-node bg-primary-50 border-2 border-primary-200 hover:border-primary-400 px-6 py-4 rounded-xl w-full max-w-md text-center group"
+                       id="node-ping-loopback">
+                        <div class="flex items-center justify-center gap-3">
+                            <span class="w-8 h-8 rounded-full bg-primary-600 text-white flex items-center justify-center text-sm font-bold">2</span>
+                            <div class="text-left">
+                                <div class="font-mono font-bold text-primary-900 text-lg">ping 127.0.0.1</div>
+                                <div class="text-sm text-primary-700">TCP/IP 协议栈是否正常？</div>
+                            </div>
+                        </div>
+                    </a>
+
+                    <div class="h-6 w-0.5 bg-slate-300"></div>
+                    <i class="fa-solid fa-chevron-down text-slate-400 text-xs -mt-3"></i>
+
+                    <!-- Step 3: ping gateway -->
+                    <div class="w-full max-w-2xl grid md:grid-cols-2 gap-4">
+                        <a href="#ping" class="decision-node bg-primary-50 border-2 border-primary-200 hover:border-primary-400 px-5 py-4 rounded-xl text-center group"
+                           id="node-ping-gateway">
+                            <div class="flex items-center justify-center gap-3">
+                                <span class="w-8 h-8 rounded-full bg-primary-600 text-white flex items-center justify-center text-sm font-bold">3</span>
+                                <div class="text-left">
+                                    <div class="font-mono font-bold text-primary-900">ping 网关</div>
+                                    <div class="text-xs text-primary-700">局域网链路正常？</div>
+                                </div>
+                            </div>
+                        </a>
+                        <a href="#arp" class="decision-node bg-accent-50 border-2 border-accent-200 hover:border-accent-400 px-5 py-4 rounded-xl text-center group"
+                           id="node-arp">
+                            <div class="flex items-center justify-center gap-3">
+                                <span class="w-8 h-8 rounded-full bg-accent-600 text-white flex items-center justify-center text-sm font-bold">分</span>
+                                <div class="text-left">
+                                    <div class="font-mono font-bold text-accent-900">arp -a</div>
+                                    <div class="text-xs text-accent-700">网关 MAC 异常时使用</div>
+                                </div>
+                            </div>
+                        </a>
+                    </div>
+
+                    <div class="h-6 w-0.5 bg-slate-300"></div>
+                    <i class="fa-solid fa-chevron-down text-slate-400 text-xs -mt-3"></i>
+
+                    <!-- Step 4: ping external -->
+                    <div class="w-full max-w-2xl grid md:grid-cols-2 gap-4">
+                        <a href="#ping" class="decision-node bg-primary-50 border-2 border-primary-200 hover:border-primary-400 px-5 py-4 rounded-xl text-center group"
+                           id="node-ping-external">
+                            <div class="flex items-center justify-center gap-3">
+                                <span class="w-8 h-8 rounded-full bg-primary-600 text-white flex items-center justify-center text-sm font-bold">4</span>
+                                <div class="text-left">
+                                    <div class="font-mono font-bold text-primary-900">ping 外网IP</div>
+                                    <div class="text-xs text-primary-700">路由与外网连通？</div>
+                                </div>
+                            </div>
+                        </a>
+                        <a href="#tracert" class="decision-node bg-accent-50 border-2 border-accent-200 hover:border-accent-400 px-5 py-4 rounded-xl text-center group"
+                           id="node-tracert">
+                            <div class="flex items-center justify-center gap-3">
+                                <span class="w-8 h-8 rounded-full bg-accent-600 text-white flex items-center justify-center text-sm font-bold">分</span>
+                                <div class="text-left">
+                                    <div class="font-mono font-bold text-accent-900">tracert</div>
+                                    <div class="text-xs text-accent-700">定位路由中断点</div>
+                                </div>
+                            </div>
+                        </a>
+                    </div>
+
+                    <div class="h-6 w-0.5 bg-slate-300"></div>
+                    <i class="fa-solid fa-chevron-down text-slate-400 text-xs -mt-3"></i>
+
+                    <!-- Step 5: ping domain -->
+                    <div class="w-full max-w-2xl grid md:grid-cols-2 gap-4">
+                        <a href="#ping" class="decision-node bg-primary-50 border-2 border-primary-200 hover:border-primary-400 px-5 py-4 rounded-xl text-center group"
+                           id="node-ping-domain">
+                            <div class="flex items-center justify-center gap-3">
+                                <span class="w-8 h-8 rounded-full bg-primary-600 text-white flex items-center justify-center text-sm font-bold">5</span>
+                                <div class="text-left">
+                                    <div class="font-mono font-bold text-primary-900">ping 域名</div>
+                                    <div class="text-xs text-primary-700">DNS 解析正常？</div>
+                                </div>
+                            </div>
+                        </a>
+                        <a href="#nslookup" class="decision-node bg-accent-50 border-2 border-accent-200 hover:border-accent-400 px-5 py-4 rounded-xl text-center group"
+                           id="node-nslookup">
+                            <div class="flex items-center justify-center gap-3">
+                                <span class="w-8 h-8 rounded-full bg-accent-600 text-white flex items-center justify-center text-sm font-bold">分</span>
+                                <div class="text-left">
+                                    <div class="font-mono font-bold text-accent-900">nslookup</div>
+                                    <div class="text-xs text-accent-700">诊断域名解析故障</div>
+                                </div>
+                            </div>
+                        </a>
+                    </div>
+
+                    <div class="h-6 w-0.5 bg-slate-300"></div>
+                    <i class="fa-solid fa-chevron-down text-slate-400 text-xs -mt-3"></i>
+
+                    <!-- End -->
+                    <div class="bg-success-50 border-2 border-success-200 text-success-800 px-6 py-3 rounded-xl font-semibold w-full max-w-xs text-center">
+                        <i class="fa-solid fa-check-circle mr-2"></i>定位故障点
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 命令详解区 -->
+        <div class="space-y-12">
+
+            <!-- 1. ipconfig -->
+            <section id="ipconfig" class="scroll-mt-24 section-card" data-section="ipconfig">
+                <div class="bg-primary-600 px-6 py-4 flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <span class="w-10 h-10 rounded-lg bg-white/20 text-white flex items-center justify-center font-bold text-lg">1</span>
+                        <div>
+                            <h3 class="text-xl font-bold text-white font-mono">ipconfig</h3>
+                            <p class="text-primary-100 text-sm">查看与管理本机网络配置</p>
+                        </div>
+                    </div>
+                    <span class="px-3 py-1 rounded-full bg-white/20 text-white text-xs font-medium">排查起点 · 主干命令</span>
+                </div>
+                <div class="p-6 sm:p-8 space-y-8">
+
+                    <!-- 何时使用 -->
+                    <div class="bg-slate-50 rounded-lg p-4 border-l-4 border-primary-500">
+                        <div class="flex items-start gap-3">
+                            <i class="fa-solid fa-lightbulb text-primary-600 mt-1"></i>
+                            <div>
+                                <h4 class="font-semibold text-slate-900 mb-1">何时使用</h4>
+                                <p class="text-slate-700 text-sm leading-relaxed">
+                                    任何网络故障排查的<strong>第一步</strong>。先确认本机 IP 地址、子网掩码、默认网关是否正确获取，
+                                    排除"本机配置错误"这一最常见原因。如果 IP 显示为 <code class="cmd-highlight">169.254.x.x</code>，说明 DHCP 获取失败。
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 关键参数 -->
+                    <div>
+                        <h4 class="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                            <i class="fa-solid fa-sliders text-slate-400"></i>关键参数
+                        </h4>
+                        <div class="overflow-x-auto rounded-lg border border-slate-200">
+                            <table class="w-full text-sm">
+                                <thead class="bg-slate-100 text-slate-700">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left font-semibold w-32">参数</th>
+                                        <th class="px-4 py-3 text-left font-semibold">功能说明</th>
+                                        <th class="px-4 py-3 text-left font-semibold">典型使用场景</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100">
+                                    <tr class="param-row transition-colors">
+                                        <td class="px-4 py-3 font-mono text-primary-700 font-semibold">/all</td>
+                                        <td class="px-4 py-3 text-slate-700">显示完整配置信息，包括 MAC 地址、DNS 服务器、DHCP 状态</td>
+                                        <td class="px-4 py-3 text-slate-600">需要查看物理地址或 DNS 设置时</td>
+                                    </tr>
+                                    <tr class="param-row transition-colors">
+                                        <td class="px-4 py-3 font-mono text-primary-700 font-semibold">/release</td>
+                                        <td class="px-4 py-3 text-slate-700">释放当前获取的 IPv4 地址</td>
+                                        <td class="px-4 py-3 text-slate-600">IP 冲突或需要重新获取地址时</td>
+                                    </tr>
+                                    <tr class="param-row transition-colors">
+                                        <td class="px-4 py-3 font-mono text-primary-700 font-semibold">/renew</td>
+                                        <td class="px-4 py-3 text-slate-700">重新向 DHCP 服务器申请 IP 地址</td>
+                                        <td class="px-4 py-3 text-slate-600">释放后重新获取，或修复 DHCP 故障</td>
+                                    </tr>
+                                    <tr class="param-row transition-colors">
+                                        <td class="px-4 py-3 font-mono text-primary-700 font-semibold">/flushdns</td>
+                                        <td class="px-4 py-3 text-slate-700">清空本地 DNS 缓存</td>
+                                        <td class="px-4 py-3 text-slate-600">域名解析异常，怀疑缓存污染时</td>
+                                    </tr>
+                                    <tr class="param-row transition-colors">
+                                        <td class="px-4 py-3 font-mono text-primary-700 font-semibold">/displaydns</td>
+                                        <td class="px-4 py-3 text-slate-700">显示本地 DNS 缓存内容</td>
+                                        <td class="px-4 py-3 text-slate-600">排查 DNS 缓存是否命中错误记录</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- 输出解读 -->
+                    <div class="grid md:grid-cols-2 gap-6">
+                        <div>
+                            <h4 class="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                                <i class="fa-solid fa-eye text-slate-400"></i>输出解读 · 关键字段
+                            </h4>
+                            <div class="cmd-box text-xs sm:text-sm">
+                                <span class="text-slate-400">Windows IP 配置</span>
+                                <span class="output-line">主机名 . . . . . . . : DESKTOP-ABC</span>
+                                <span class="output-line">IPv4 地址 . . . . . : <span class="text-green-400 font-semibold">192.168.1.105</span></span>
+                                <span class="output-line">子网掩码 . . . . . . : 255.255.255.0</span>
+                                <span class="output-line">默认网关 . . . . . . : 192.168.1.1</span>
+                                <span class="output-line highlight">物理地址. . . . . . : <span class="text-yellow-400">A4-B1-C2-D3-E4-F5</span>  ← MAC 地址</span>
+                                <span class="output-line">DHCP 已启用 . . . . : 是</span>
+                                <span class="output-line">DNS 服务器 . . . . . : 223.5.5.5</span>
+                                <span class="output-line">  . . . . . . . . . . : 114.114.114.114</span>
+                            </div>
+                        </div>
+                        <div class="space-y-3">
+                            <div class="bg-white border border-slate-200 rounded-lg p-4">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <i class="fa-solid fa-circle-check text-success-600 text-xs"></i>
+                                    <span class="font-semibold text-sm text-slate-900">正常判断</span>
+                                </div>
+                                <ul class="text-sm text-slate-600 space-y-1 list-disc list-inside">
+                                    <li>IPv4 地址在局域网网段内（如 192.168.x.x）</li>
+                                    <li>默认网关与路由器地址一致</li>
+                                    <li>DNS 服务器不为空</li>
+                                </ul>
+                            </div>
+                            <div class="bg-white border border-slate-200 rounded-lg p-4">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <i class="fa-solid fa-circle-xmark text-danger-600 text-xs"></i>
+                                    <span class="font-semibold text-sm text-slate-900">异常信号</span>
+                                </div>
+                                <ul class="text-sm text-slate-600 space-y-1 list-disc list-inside">
+                                    <li>IP 为 <code class="cmd-highlight">169.254.x.x</code> → DHCP 失败</li>
+                                    <li>默认网关为空 → 无法访问外网</li>
+                                    <li>IP 与网段内其他设备冲突</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 下一步决策 -->
+                    <div class="bg-primary-50 rounded-lg p-4 flex items-start gap-3 border border-primary-100">
+                        <i class="fa-solid fa-arrow-right-long text-primary-600 mt-1"></i>
+                        <div>
+                            <span class="font-semibold text-primary-900">下一步：</span>
+                            <span class="text-primary-800 text-sm">配置确认无误后，执行 <code class="cmd-highlight">ping 127.0.0.1</code> 测试协议栈。</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 2. Ping -->
+            <section id="ping" class="scroll-mt-24 section-card" data-section="ping">
+                <div class="bg-primary-600 px-6 py-4 flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <span class="w-10 h-10 rounded-lg bg-white/20 text-white flex items-center justify-center font-bold text-lg">2</span>
+                        <div>
+                            <h3 class="text-xl font-bold text-white font-mono">ping</h3>
+                            <p class="text-primary-100 text-sm">测试网络连通性与通信质量</p>
+                        </div>
+                    </div>
+                    <span class="px-3 py-1 rounded-full bg-white/20 text-white text-xs font-medium">排查主干 · 使用频率最高</span>
+                </div>
+                <div class="p-6 sm:p-8 space-y-8">
+
+                    <div class="bg-slate-50 rounded-lg p-4 border-l-4 border-primary-500">
+                        <div class="flex items-start gap-3">
+                            <i class="fa-solid fa-lightbulb text-primary-600 mt-1"></i>
+                            <div>
+                                <h4 class="font-semibold text-slate-900 mb-1">何时使用</h4>
+                                <p class="text-slate-700 text-sm leading-relaxed">
+                                    连通性测试的<strong>主干命令</strong>，贯穿整个排查流程。按顺序测试：
+                                    <span class="font-semibold">本地回环 → 网关 → 外网 IP → 域名</span>。
+                                    每次测试都回答一个明确问题：网络通到哪一层断了？
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="grid lg:grid-cols-2 gap-6">
+                        <div>
+                            <h4 class="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                                <i class="fa-solid fa-sliders text-slate-400"></i>关键参数
+                            </h4>
+                            <div class="overflow-x-auto rounded-lg border border-slate-200">
+                                <table class="w-full text-sm">
+                                    <thead class="bg-slate-100 text-slate-700">
+                                        <tr><th class="px-4 py-3 text-left font-semibold w-28">参数</th><th class="px-4 py-3 text-left font-semibold">功能</th><th class="px-4 py-3 text-left font-semibold">示例</th></tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-100">
+                                        <tr class="param-row"><td class="px-4 py-3 font-mono text-primary-700 font-semibold">-t</td><td class="px-4 py-3 text-slate-700">持续 ping，直到手动停止</td><td class="px-4 py-3 font-mono text-slate-600 text-xs">ping -t 192.168.1.1</td></tr>
+                                        <tr class="param-row"><td class="px-4 py-3 font-mono text-primary-700 font-semibold">-n</td><td class="px-4 py-3 text-slate-700">指定发送数据包数量</td><td class="px-4 py-3 font-mono text-slate-600 text-xs">ping -n 4 baidu.com</td></tr>
+                                        <tr class="param-row"><td class="px-4 py-3 font-mono text-primary-700 font-semibold">-l</td><td class="px-4 py-3 text-slate-700">指定数据包大小（字节）</td><td class="px-4 py-3 font-mono text-slate-600 text-xs">ping -l 1500 网关</td></tr>
+                                        <tr class="param-row"><td class="px-4 py-3 font-mono text-primary-700 font-semibold">-i</td><td class="px-4 py-3 text-slate-700">设置 TTL（生存时间）</td><td class="px-4 py-3 font-mono text-slate-600 text-xs">ping -i 1 网关</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                                <i class="fa-solid fa-route text-slate-400"></i>排查路径与判断逻辑
+                            </h4>
+                            <div class="space-y-3">
+                                <div class="flex items-start gap-3 p-3 rounded-lg bg-white border border-slate-200">
+                                    <span class="w-6 h-6 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-xs font-bold mt-0.5">1</span>
+                                    <div>
+                                        <div class="font-mono text-sm font-semibold text-slate-900">ping 127.0.0.1</div>
+                                        <div class="text-xs text-slate-600">测试本机 TCP/IP 协议栈。不通 → 重装协议栈/网卡驱动。</div>
+                                    </div>
+                                </div>
+                                <div class="flex items-start gap-3 p-3 rounded-lg bg-white border border-slate-200">
+                                    <span class="w-6 h-6 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-xs font-bold mt-0.5">2</span>
+                                    <div>
+                                        <div class="font-mono text-sm font-semibold text-slate-900">ping 默认网关</div>
+                                        <div class="text-xs text-slate-600">测试局域网链路。不通 → 检查网线/无线连接，执行 <span class="cmd-highlight">arp -a</span>。</div>
+                                    </div>
+                                </div>
+                                <div class="flex items-start gap-3 p-3 rounded-lg bg-white border border-slate-200">
+                                    <span class="w-6 h-6 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-xs font-bold mt-0.5">3</span>
+                                    <div>
+                                        <div class="font-mono text-sm font-semibold text-slate-900">ping 外网 IP（如 223.5.5.5）</div>
+                                        <div class="text-xs text-slate-600">测试路由与外网连通。不通 → 执行 <span class="cmd-highlight">tracert</span> 定位断点。</div>
+                                    </div>
+                                </div>
+                                <div class="flex items-start gap-3 p-3 rounded-lg bg-white border border-slate-200">
+                                    <span class="w-6 h-6 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-xs font-bold mt-0.5">4</span>
+                                    <div>
+                                        <div class="font-mono text-sm font-semibold text-slate-900">ping 域名（如 baidu.com）</div>
+                                        <div class="text-xs text-slate-600">测试 DNS 解析。IP 通但域名不通 → 执行 <span class="cmd-highlight">nslookup</span>。</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 输出解读 -->
+                    <div>
+                        <h4 class="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                            <i class="fa-solid fa-eye text-slate-400"></i>输出解读 · 典型结果分析
+                        </h4>
+                        <div class="grid md:grid-cols-2 gap-6">
+                            <div>
+                                <div class="flex items-center gap-2 mb-2 text-sm font-semibold text-success-700">
+                                    <i class="fa-solid fa-check"></i>正常连通示例
+                                </div>
+                                <div class="cmd-box text-xs">
+                                    <span class="text-slate-400">C:\> ping -n 4 192.168.1.1</span>
+                                    <span class="output-line success">来自 192.168.1.1 的回复: 字节=32 时间=1ms TTL=64</span>
+                                    <span class="output-line success">来自 192.168.1.1 的回复: 字节=32 时间=2ms TTL=64</span>
+                                    <span class="output-line success">来自 192.168.1.1 的回复: 字节=32 时间=1ms TTL=64</span>
+                                    <span class="output-line success">来自 192.168.1.1 的回复: 字节=32 时间=1ms TTL=64</span>
+                                    <span class="text-slate-400">192.168.1.1 的 Ping 统计信息:</span>
+                                    <span class="output-line">数据包: 已发送 = 4，已接收 = 4，<span class="text-green-400 font-bold">丢失 = 0 (0% 丢失)</span></span>
+                                    <span class="text-slate-400">往返行程的估计时间(以毫秒为单位):</span>
+                                    <span class="output-line">最短 = 1ms，最长 = 2ms，平均 = 1ms</span>
+                                </div>
+                                <div class="mt-2 text-xs text-slate-600 space-y-1">
+                                    <p><span class="font-semibold text-success-600">TTL=64</span>：目标主机为 Linux/Unix 系统（Windows 通常 128）</p>
+                                    <p><span class="font-semibold text-success-600">时间&lt;10ms</span>：局域网内正常延迟</p>
+                                    <p><span class="font-semibold text-success-600">0% 丢失</span>：链路稳定</p>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-2 mb-2 text-sm font-semibold text-danger-700">
+                                    <i class="fa-solid fa-xmark"></i>请求超时示例
+                                </div>
+                                <div class="cmd-box text-xs">
+                                    <span class="text-slate-400">C:\> ping -n 4 192.168.1.100</span>
+                                    <span class="output-line error">请求超时。</span>
+                                    <span class="output-line error">请求超时。</span>
+                                    <span class="output-line error">请求超时。</span>
+                                    <span class="output-line error">请求超时。</span>
+                                    <span class="text-slate-400">192.168.1.100 的 Ping 统计信息:</span>
+                                    <span class="output-line">数据包: 已发送 = 4，已接收 = 0，<span class="text-red-400 font-bold">丢失 = 4 (100% 丢失)</span></span>
+                                </div>
+                                <div class="mt-2 text-xs text-slate-600 space-y-1">
+                                    <p><span class="font-semibold text-danger-600">100% 丢失</span>：目标主机离线或防火墙拦截</p>
+                                    <p><span class="font-semibold text-danger-600">请求超时</span>：数据包未收到回复，可能路由不可达</p>
+                                    <p class="text-slate-500">注意：部分服务器会禁用 ICMP 响应，此时 ping 不通不代表服务不可用。</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 3. ARP -->
+            <section id="arp" class="scroll-mt-24 section-card" data-section="arp">
+                <div class="bg-accent-600 px-6 py-4 flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <span class="w-10 h-10 rounded-lg bg-white/20 text-white flex items-center justify-center font-bold text-lg">3</span>
+                        <div>
+                            <h3 class="text-xl font-bold text-white font-mono">arp</h3>
+                            <p class="text-accent-100 text-sm">查看与操作 IP-MAC 地址映射表</p>
+                        </div>
+                    </div>
+                    <span class="px-3 py-1 rounded-full bg-white/20 text-white text-xs font-medium">分支命令 · 局域网链路诊断</span>
+                </div>
+                <div class="p-6 sm:p-8 space-y-8">
+
+                    <div class="bg-accent-50 rounded-lg p-4 border-l-4 border-accent-500">
+                        <div class="flex items-start gap-3">
+                            <i class="fa-solid fa-lightbulb text-accent-600 mt-1"></i>
+                            <div>
+                                <h4 class="font-semibold text-slate-900 mb-1">何时使用</h4>
+                                <p class="text-slate-700 text-sm leading-relaxed">
+                                    当 <code class="cmd-highlight">ping 网关不通</code> 或局域网内设备无法互访时使用。
+                                    ARP 负责将 IP 地址解析为 MAC 地址，如果 ARP 表错误或存在欺骗（ARP 欺骗攻击），
+                                    数据帧无法正确送达目标设备。
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="grid lg:grid-cols-2 gap-6">
+                        <div>
+                            <h4 class="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                                <i class="fa-solid fa-sliders text-slate-400"></i>关键参数
+                            </h4>
+                            <div class="overflow-x-auto rounded-lg border border-slate-200">
+                                <table class="w-full text-sm">
+                                    <thead class="bg-slate-100 text-slate-700">
+                                        <tr><th class="px-4 py-3 text-left font-semibold w-28">参数</th><th class="px-4 py-3 text-left font-semibold">功能</th><th class="px-4 py-3 text-left font-semibold">示例</th></tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-100">
+                                        <tr class="param-row"><td class="px-4 py-3 font-mono text-accent-700 font-semibold">-a</td><td class="px-4 py-3 text-slate-700">显示当前 ARP 缓存表</td><td class="px-4 py-3 font-mono text-slate-600 text-xs">arp -a</td></tr>
+                                        <tr class="param-row"><td class="px-4 py-3 font-mono text-accent-700 font-semibold">-d</td><td class="px-4 py-3 text-slate-700">删除指定 IP 的 ARP 记录</td><td class="px-4 py-3 font-mono text-slate-600 text-xs">arp -d 192.168.1.1</td></tr>
+                                        <tr class="param-row"><td class="px-4 py-3 font-mono text-accent-700 font-semibold">-s</td><td class="px-4 py-3 text-slate-700">静态绑定 IP 与 MAC 地址</td><td class="px-4 py-3 font-mono text-slate-600 text-xs">arp -s 192.168.1.1 AA-BB-CC-DD-EE-FF</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                                <i class="fa-solid fa-eye text-slate-400"></i>输出解读
+                            </h4>
+                            <div class="cmd-box text-xs">
+                                <span class="text-slate-400">C:\> arp -a</span>
+                                <span class="text-slate-400">接口: 192.168.1.105 --- 0x12</span>
+                                <span class="text-slate-400">Internet 地址  物理地址              类型</span>
+                                <span class="output-line success">192.168.1.1     a4-b1-c2-d3-e4-f5     <span class="text-green-400">动态</span></span>
+                                <span class="output-line">192.168.1.2     00-11-22-33-44-55     动态</span>
+                                <span class="output-line highlight">192.168.1.1     11-22-33-44-55-66     <span class="text-yellow-400">静态</span>  ← 静态绑定</span>
+                                <span class="output-line error">192.168.1.100   00-00-00-00-00-00     <span class="text-red-400">无效</span></span>
+                            </div>
+                            <div class="mt-3 space-y-2 text-xs text-slate-600">
+                                <p><span class="font-semibold text-slate-900">动态类型：</span>通过 ARP 协议自动学习，有老化时间</p>
+                                <p><span class="font-semibold text-slate-900">静态类型：</span>手动绑定，不会被刷新，用于防范 ARP 欺骗</p>
+                                <p><span class="font-semibold text-slate-900">物理地址 00-00-00-00-00-00：</span>解析失败，目标可能不在线</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-accent-50 rounded-lg p-4 flex items-start gap-3 border border-accent-100">
+                        <i class="fa-solid fa-arrow-right-long text-accent-600 mt-1"></i>
+                        <div>
+                            <span class="font-semibold text-accent-900">典型场景：</span>
+                            <span class="text-accent-800 text-sm">能获取 IP 但无法上网？检查网关 MAC 是否被篡改（ARP 欺骗）。对比路由器标签上的真实 MAC 与 <code class="cmd-highlight">arp -a</code> 中网关 IP 对应的 MAC 是否一致。</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 4. Tracert -->
+            <section id="tracert" class="scroll-mt-24 section-card" data-section="tracert">
+                <div class="bg-accent-600 px-6 py-4 flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <span class="w-10 h-10 rounded-lg bg-white/20 text-white flex items-center justify-center font-bold text-lg">4</span>
+                        <div>
+                            <h3 class="text-xl font-bold text-white font-mono">tracert</h3>
+                            <p class="text-accent-100 text-sm">追踪数据包路由路径与逐跳延迟</p>
+                        </div>
+                    </div>
+                    <span class="px-3 py-1 rounded-full bg-white/20 text-white text-xs font-medium">分支命令 · 路由路径诊断</span>
+                </div>
+                <div class="p-6 sm:p-8 space-y-8">
+
+                    <div class="bg-accent-50 rounded-lg p-4 border-l-4 border-accent-500">
+                        <div class="flex items-start gap-3">
+                            <i class="fa-solid fa-lightbulb text-accent-600 mt-1"></i>
+                            <div>
+                                <h4 class="font-semibold text-slate-900 mb-1">何时使用</h4>
+                                <p class="text-slate-700 text-sm leading-relaxed">
+                                    当 <code class="cmd-highlight">ping 外网 IP 不通</code> 或访问特定网站异常缓慢时使用。
+                                    用于定位故障发生在<strong>哪一跳路由器</strong>上，是网络层路径追踪的核心工具。
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="grid lg:grid-cols-2 gap-6">
+                        <div>
+                            <h4 class="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                                <i class="fa-solid fa-sliders text-slate-400"></i>关键参数
+                            </h4>
+                            <div class="overflow-x-auto rounded-lg border border-slate-200">
+                                <table class="w-full text-sm">
+                                    <thead class="bg-slate-100 text-slate-700">
+                                        <tr><th class="px-4 py-3 text-left font-semibold w-28">参数</th><th class="px-4 py-3 text-left font-semibold">功能</th><th class="px-4 py-3 text-left font-semibold">示例</th></tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-100">
+                                        <tr class="param-row"><td class="px-4 py-3 font-mono text-accent-700 font-semibold">-d</td><td class="px-4 py-3 text-slate-700">不解析主机名，加速显示</td><td class="px-4 py-3 font-mono text-slate-600 text-xs">tracert -d baidu.com</td></tr>
+                                        <tr class="param-row"><td class="px-4 py-3 font-mono text-accent-700 font-semibold">-h</td><td class="px-4 py-3 text-slate-700">设置最大跃点数（默认30）</td><td class="px-4 py-3 font-mono text-slate-600 text-xs">tracert -h 15 8.8.8.8</td></tr>
+                                        <tr class="param-row"><td class="px-4 py-3 font-mono text-accent-700 font-semibold">-w</td><td class="px-4 py-3 text-slate-700">设置超时等待毫秒数</td><td class="px-4 py-3 font-mono text-slate-600 text-xs">tracert -w 5000 baidu.com</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                                <i class="fa-solid fa-eye text-slate-400"></i>输出解读
+                            </h4>
+                            <div class="cmd-box text-xs">
+                                <span class="text-slate-400">C:\> tracert -d baidu.com</span>
+                                <span class="text-slate-400">通过最多 30 个跃点跟踪到 baidu.com [110.242.68.66] 的路由:</span>
+                                <span class="output-line">  1     1 ms     1 ms     1 ms  192.168.1.1</span>
+                                <span class="output-line">  2     3 ms     2 ms     2 ms  10.10.0.1</span>
+                                <span class="output-line">  3     5 ms     5 ms     6 ms  172.16.1.1</span>
+                                <span class="output-line error">  4     *        *        *     请求超时。</span>
+                                <span class="output-line error">  5     *        *        *     请求超时。</span>
+                                <span class="text-slate-400">  ...</span>
+                            </div>
+                            <div class="mt-3 space-y-2 text-xs text-slate-600">
+                                <p><span class="font-semibold text-slate-900">第 1 列：</span>跃点序号（经过的第几台路由器）</p>
+                                <p><span class="font-semibold text-slate-900">后 3 列：</span>三次探测的往返延迟（单位 ms）</p>
+                                <p><span class="font-semibold text-slate-900">最后一列：</span>该跃点路由器 IP 地址</p>
+                                <p class="text-danger-600 font-semibold mt-2"><i class="fa-solid fa-triangle-exclamation mr-1"></i>从第 4 跳开始出现 * * * 请求超时 → 故障定位在第 3 跳到第 4 跳之间</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white border border-slate-200 rounded-lg p-5">
+                        <h5 class="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                            <i class="fa-solid fa-circle-info text-primary-600"></i>工作原理简述
+                        </h5>
+                        <p class="text-sm text-slate-600 leading-relaxed">
+                            tracert 利用 IP 协议的 <strong>TTL（生存时间）</strong>机制。发送数据包时 TTL 从 1 开始递增，
+                            每经过一个路由器 TTL 减 1。当 TTL 为 0 时，路由器丢弃数据包并返回"超时"错误。
+                            通过依次递增 TTL，traceroute 就能逐跳"逼出"路径上每台路由器的地址。
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 5. NSLookup -->
+            <section id="nslookup" class="scroll-mt-24 section-card" data-section="nslookup">
+                <div class="bg-accent-600 px-6 py-4 flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <span class="w-10 h-10 rounded-lg bg-white/20 text-white flex items-center justify-center font-bold text-lg">5</span>
+                        <div>
+                            <h3 class="text-xl font-bold text-white font-mono">nslookup</h3>
+                            <p class="text-accent-100 text-sm">查询 DNS 域名解析记录</p>
+                        </div>
+                    </div>
+                    <span class="px-3 py-1 rounded-full bg-white/20 text-white text-xs font-medium">分支命令 · DNS 解析诊断</span>
+                </div>
+                <div class="p-6 sm:p-8 space-y-8">
+
+                    <div class="bg-accent-50 rounded-lg p-4 border-l-4 border-accent-500">
+                        <div class="flex items-start gap-3">
+                            <i class="fa-solid fa-lightbulb text-accent-600 mt-1"></i>
+                            <div>
+                                <h4 class="font-semibold text-slate-900 mb-1">何时使用</h4>
+                                <p class="text-slate-700 text-sm leading-relaxed">
+                                    当 <code class="cmd-highlight">ping 外网 IP 通，但 ping 域名不通</code> 时使用。
+                                    这明确指向 <strong>DNS 解析故障</strong>：本机到互联网链路正常，但无法将域名转换为 IP 地址。
+                                    也用于查询域名对应的 MX 记录、NS 记录等 DNS 详情。
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="grid lg:grid-cols-2 gap-6">
+                        <div>
+                            <h4 class="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                                <i class="fa-solid fa-sliders text-slate-400"></i>使用模式与参数
+                            </h4>
+                            <div class="space-y-4">
+                                <div class="bg-white border border-slate-200 rounded-lg p-4">
+                                    <div class="font-semibold text-sm text-slate-900 mb-2">非交互模式（快速查询）</div>
+                                    <div class="cmd-box text-xs mb-2">
+                                        <span class="text-slate-400">C:\> nslookup baidu.com</span>
+                                    </div>
+                                    <p class="text-xs text-slate-600">直接查询指定域名的 A 记录，返回默认 DNS 服务器和解析结果。</p>
+                                </div>
+                                <div class="bg-white border border-slate-200 rounded-lg p-4">
+                                    <div class="font-semibold text-sm text-slate-900 mb-2">交互模式（详细查询）</div>
+                                    <div class="cmd-box text-xs mb-2">
+                                        <span class="text-slate-400">C:\> nslookup</span>
+                                        <span class="text-slate-400">> set type=mx</span>
+                                        <span class="text-slate-400">> baidu.com</span>
+                                    </div>
+                                    <p class="text-xs text-slate-600">进入交互环境后，可切换查询类型（A/MX/NS/TXT），适合批量查询。</p>
+                                </div>
+                                <div class="overflow-x-auto rounded-lg border border-slate-200">
+                                    <table class="w-full text-sm">
+                                        <thead class="bg-slate-100 text-slate-700">
+                                            <tr><th class="px-4 py-3 text-left font-semibold">查询类型</th><th class="px-4 py-3 text-left font-semibold">说明</th></tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-slate-100">
+                                            <tr class="param-row"><td class="px-4 py-3 font-mono text-accent-700 font-semibold">A</td><td class="px-4 py-3 text-slate-700">主机 IPv4 地址（默认）</td></tr>
+                                            <tr class="param-row"><td class="px-4 py-3 font-mono text-accent-700 font-semibold">AAAA</td><td class="px-4 py-3 text-slate-700">主机 IPv6 地址</td></tr>
+                                            <tr class="param-row"><td class="px-4 py-3 font-mono text-accent-700 font-semibold">MX</td><td class="px-4 py-3 text-slate-700">邮件交换记录</td></tr>
+                                            <tr class="param-row"><td class="px-4 py-3 font-mono text-accent-700 font-semibold">NS</td><td class="px-4 py-3 text-slate-700">域名服务器记录</td></tr>
+                                            <tr class="param-row"><td class="px-4 py-3 font-mono text-accent-700 font-semibold">PTR</td><td class="px-4 py-3 text-slate-700">反向解析（IP 查域名）</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                                <i class="fa-solid fa-eye text-slate-400"></i>输出解读
+                            </h4>
+                            <div class="cmd-box text-xs mb-4">
+                                <span class="text-slate-400">C:\> nslookup baidu.com</span>
+                                <span class="text-slate-400">服务器:  UnKnown</span>
+                                <span class="text-slate-400">Address:  192.168.1.1</span>
+                                <span class="text-slate-400">  </span>
+                                <span class="text-slate-400">非权威应答:</span>
+                                <span class="output-line success">名称:    baidu.com</span>
+                                <span class="output-line success">Addresses:  <span class="text-green-400">110.242.68.66</span></span>
+                                <span class="output-line success">          <span class="text-green-400">110.242.68.67</span></span>
+                            </div>
+                            <div class="space-y-3">
+                                <div class="bg-white border border-slate-200 rounded-lg p-3">
+                                    <div class="text-xs font-semibold text-slate-900 mb-1">正常情况</div>
+                                    <p class="text-xs text-slate-600">返回域名对应的 IP 地址列表，说明 DNS 解析正常。</p>
+                                </div>
+                                <div class="bg-white border border-slate-200 rounded-lg p-3">
+                                    <div class="text-xs font-semibold text-slate-900 mb-1">DNS 服务器无响应</div>
+                                    <p class="text-xs text-slate-600">超时或显示 "*** 找不到 baidu.com: Non-existent domain"，说明 DNS 服务器故障或域名不存在。</p>
+                                </div>
+                                <div class="bg-white border border-slate-200 rounded-lg p-3">
+                                    <div class="text-xs font-semibold text-slate-900 mb-1">返回错误 IP</div>
+                                    <p class="text-xs text-slate-600">解析结果明显异常（如返回 127.0.0.1 或陌生 IP），可能是 hosts 文件被篡改或 DNS 劫持。</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-accent-50 rounded-lg p-4 flex items-start gap-3 border border-accent-100">
+                        <i class="fa-solid fa-arrow-right-long text-accent-600 mt-1"></i>
+                        <div>
+                            <span class="font-semibold text-accent-900">排查技巧：</span>
+                            <span class="text-accent-800 text-sm">如果 nslookup 返回超时，尝试指定公共 DNS 服务器测试：<code class="cmd-highlight">nslookup baidu.com 223.5.5.5</code>。如果指定公共 DNS 能解析，说明本机配置的 DNS 服务器有问题。</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- 对比总结表 -->
+        <section id="summary" class="scroll-mt-24">
+            <div class="flex items-center gap-3 mb-8">
+                <div class="w-8 h-8 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center">
+                    <i class="fa-solid fa-table-list"></i>
+                </div>
+                <h2 class="text-2xl font-bold text-slate-900">五大命令速查对比表</h2>
+            </div>
+
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="bg-slate-900 text-white">
+                                <th class="px-4 py-4 text-left font-semibold w-28">命令</th>
+                                <th class="px-4 py-4 text-left font-semibold w-32">命令类型</th>
+                                <th class="px-4 py-4 text-left font-semibold">核心功能</th>
+                                <th class="px-4 py-4 text-left font-semibold">使用触发条件</th>
+                                <th class="px-4 py-4 text-left font-semibold">工作层级</th>
+                                <th class="px-4 py-4 text-left font-semibold">典型判断结论</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            <tr class="hover:bg-slate-50 transition-colors">
+                                <td class="px-4 py-4 font-mono font-bold text-primary-700">ipconfig</td>
+                                <td class="px-4 py-4"><span class="px-2 py-1 rounded bg-primary-100 text-primary-700 text-xs font-semibold">主干</span></td>
+                                <td class="px-4 py-4 text-slate-700">查看本机 IP、子网掩码、网关、MAC、DNS 配置</td>
+                                <td class="px-4 py-4 text-slate-600">任何排查的起点</td>
+                                <td class="px-4 py-4 text-slate-600">网络接口层 / 网络层</td>
+                                <td class="px-4 py-4 text-slate-600">IP 是否获取成功？网关是否正确？</td>
+                            </tr>
+                            <tr class="hover:bg-slate-50 transition-colors">
+                                <td class="px-4 py-4 font-mono font-bold text-primary-700">ping</td>
+                                <td class="px-4 py-4"><span class="px-2 py-1 rounded bg-primary-100 text-primary-700 text-xs font-semibold">主干</span></td>
+                                <td class="px-4 py-4 text-slate-700">测试端到端连通性，测量往返延迟与丢包率</td>
+                                <td class="px-4 py-4 text-slate-600">验证某节点是否可达</td>
+                                <td class="px-4 py-4 text-slate-600">网络层（ICMP）</td>
+                                <td class="px-4 py-4 text-slate-600">链路通断？延迟是否正常？是否有丢包？</td>
+                            </tr>
+                            <tr class="hover:bg-slate-50 transition-colors">
+                                <td class="px-4 py-4 font-mono font-bold text-accent-700">arp</td>
+                                <td class="px-4 py-4"><span class="px-2 py-1 rounded bg-accent-100 text-accent-700 text-xs font-semibold">分支</span></td>
+                                <td class="px-4 py-4 text-slate-700">查看 IP-MAC 映射表，检测 ARP 欺骗</td>
+                                <td class="px-4 py-4 text-slate-600">ping 网关不通时</td>
+                                <td class="px-4 py-4 text-slate-600">数据链路层</td>
+                                <td class="px-4 py-4 text-slate-600">MAC 地址是否正确？是否存在冲突？</td>
+                            </tr>
+                            <tr class="hover:bg-slate-50 transition-colors">
+                                <td class="px-4 py-4 font-mono font-bold text-accent-700">tracert</td>
+                                <td class="px-4 py-4"><span class="px-2 py-1 rounded bg-accent-100 text-accent-700 text-xs font-semibold">分支</span></td>
+                                <td class="px-4 py-4 text-slate-700">追踪路由路径，定位哪一跳出现故障</td>
+                                <td class="px-4 py-4 text-slate-600">ping 外网不通或访问缓慢时</td>
+                                <td class="px-4 py-4 text-slate-600">网络层</td>
+                                <td class="px-4 py-4 text-slate-600">故障发生在路径的哪一段？哪台路由器丢包？</td>
+                            </tr>
+                            <tr class="hover:bg-slate-50 transition-colors">
+                                <td class="px-4 py-4 font-mono font-bold text-accent-700">nslookup</td>
+                                <td class="px-4 py-4"><span class="px-2 py-1 rounded bg-accent-100 text-accent-700 text-xs font-semibold">分支</span></td>
+                                <td class="px-4 py-4 text-slate-700">查询 DNS 解析记录，诊断域名解析故障</td>
+                                <td class="px-4 py-4 text-slate-600">ping IP 通但 ping 域名不通时</td>
+                                <td class="px-4 py-4 text-slate-600">应用层</td>
+                                <td class="px-4 py-4 text-slate-600">域名是否正确解析？DNS 服务器是否正常？</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="bg-slate-50 px-4 py-3 border-t border-slate-200 text-xs text-slate-500 flex items-center gap-4">
+                    <span><span class="inline-block w-3 h-3 rounded bg-primary-100 border border-primary-200 mr-1"></span>主干命令：排查路径必用</span>
+                    <span><span class="inline-block w-3 h-3 rounded bg-accent-100 border border-accent-200 mr-1"></span>分支命令：特定场景使用</span>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="bg-white border-t border-slate-200 mt-16 py-8">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 text-center text-sm text-slate-500">
+            <p>基于网络故障排查第一性原理设计 · 主干与分支命令按决策路径组织</p>
+            <p class="mt-2">教学建议：先掌握排查流程，再记忆具体参数</p>
+        </div>
+    </footer>
+
+    <!-- 返回顶部 -->
+    <button onclick="window.scrollTo({top:0,behavior:'smooth'})" 
+            class="fixed bottom-6 right-6 w-10 h-10 bg-white border border-slate-200 rounded-full shadow-lg flex items-center justify-center text-slate-600 hover:text-primary-600 hover:border-primary-300 transition-all z-40"
+            id="backToTop" style="display:none;">
+        <i class="fa-solid fa-arrow-up"></i>
+    </button>
+
+    <script>
+        // 滚动到指定 section 并高亮
+        function scrollToSection(id) {
+            const el = document.getElementById(id);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                // 移除其他高亮
+                document.querySelectorAll('.section-card').forEach(c => c.classList.remove('highlighted'));
+                // 添加高亮
+                setTimeout(() => {
+                    el.classList.add('highlighted');
+                    setTimeout(() => el.classList.remove('highlighted'), 2000);
+                }, 600);
+            }
+        }
+
+        // 导航栏高亮当前 section
+        const sections = document.querySelectorAll('.section-card');
+        const navLinks = document.querySelectorAll('nav a[href^="#"]');
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const id = entry.target.getAttribute('id');
+                    navLinks.forEach(link => {
+                        link.classList.remove('text-primary-600', 'font-semibold');
+                        if (link.getAttribute('href') === '#' + id) {
+                            link.classList.add('text-primary-600', 'font-semibold');
+                        }
+                    });
+                }
+            });
+        }, { threshold: 0.3 });
+
+        sections.forEach(section => observer.observe(section));
+
+        // 也观察流程图和总结表
+        observer.observe(document.getElementById('flowchart'));
+        observer.observe(document.getElementById('summary'));
+
+        // 返回顶部按钮显示/隐藏
+        window.addEventListener('scroll', () => {
+            const btn = document.getElementById('backToTop');
+            btn.style.display = window.scrollY > 400 ? 'flex' : 'none';
+        });
+
+        // 流程图节点点击联动
+        document.querySelectorAll('.decision-node').forEach(node => {
+            node.addEventListener('click', function() {
+                const onclick = this.getAttribute('onclick');
+                if (onclick && onclick.includes('scrollToSection')) {
+                    // 已由 onclick 处理
+                    return;
+                }
+                // 对于 a 标签，由 href 处理
+            });
+        });
+    </script>
+</body>
+</html>
